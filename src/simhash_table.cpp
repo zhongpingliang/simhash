@@ -26,6 +26,8 @@ public :
     virtual bool Remove         (hash_t hash)                       = 0;
     virtual bool Search         (hash_t hash)                       = 0;
     virtual bool HasNearDups    (hash_t hash, hash_t mask = 0UL)    = 0;
+    virtual bool FindFirstNearDup(hash_t hash, hash_t &nearDup,
+        hash_t mask = 0UL)      = 0;
     virtual bool FindNearDups   (hash_t hash, FindAnswerType &ans,
         hash_t mask = 0UL)      = 0;
     virtual void    Clear()     = 0;
@@ -67,6 +69,8 @@ public:
     virtual bool Remove         (hash_t hash);
     virtual bool Search         (hash_t hash);
     virtual bool HasNearDups    (hash_t hash, hash_t mask = 0UL);
+    virtual bool FindFirstNearDup(hash_t hash, hash_t &nearDup,
+        hash_t mask = 0UL);
     virtual bool FindNearDups   (hash_t hash, FindAnswerType &ans,
         hash_t mask = 0UL);
     virtual void    Clear();
@@ -129,13 +133,15 @@ public:
     virtual bool Remove         (hash_t hash);
     virtual bool Search         (hash_t hash);
     virtual bool HasNearDups    (hash_t hash, hash_t mask = 0UL);
-    virtual bool FindNearDups   (hash_t hash, FindAnswerType &ans
-        , hash_t mask = 0UL);
+    virtual bool FindFirstNearDup(hash_t hash, hash_t &nearDup,
+        hash_t mask = 0UL);
+    virtual bool FindNearDups   (hash_t hash, FindAnswerType &ans,
+        hash_t mask = 0UL);
     virtual void    Clear();
     virtual uint_t  GetSize();
     virtual bool SaveToFile(const std::string &filename, bool binary);
 protected:
-    void Init();
+    bool Init();
     void GetForwardPermutes(hash_t hash, std::vector<hash_t> &ans);
 
     inline hash_t ForwardPermute(hash_t hash, const SingleContainerProps &props)
@@ -185,6 +191,8 @@ protected:
     }
 protected:
     uint_t mBlockNum;           // The number of blocks, equals mMaxHammDist + 1
+    ContainerType  mContainer;  // The containers.
+    PropsType mProps;           // The property for each single container
     /*
     * The positions where mask bits begin and end, for example :
     *      x = 0 | 0 | 1 | 1 | 0 | 0 | 0 | 0
@@ -194,8 +202,6 @@ protected:
     uint_t mMaskBeginPos;
     uint_t mMaskEndPos;
 
-    ContainerType  mContainer;  // The containers.
-    PropsType mProps;           // The property for each single container
     friend class SimhashContainerFactory;
 };
 
@@ -241,16 +247,20 @@ bool SimhashSequentialContainner::Search(hash_t hash)
 
 bool SimhashSequentialContainner::HasNearDups(hash_t hash, hash_t mask)
 {
-    if (Search(hash))
-    {
-        return true;
-    }
+    hash_t tmp;
+    return FindFirstNearDup(hash, tmp, mask);
+}
+
+bool SimhashSequentialContainner::FindFirstNearDup(hash_t hash, hash_t &nearDup,
+    hash_t mask)
+{
     const ContainerType::iterator lower = mContainer.lower_bound(hash &  mask );
     const ContainerType::iterator upper = mContainer.upper_bound(hash |(~mask));
     for (ContainerType::iterator it = lower; upper != it; ++it)
     {
         if (Simhash::IsNearDups(hash, *it, mMaxHamDist))
         {
+            nearDup = *it;
             return true;
         }
     }
@@ -295,7 +305,7 @@ bool SimhashSequentialContainner::SaveToFile(const std::string &filename,
             if (BUFF_SIZE == count)
             {
                 fout.write(reinterpret_cast<char*>(buff), BYTES * BUFF_SIZE);
-                count = 0U; 
+                count = 0U;
             }
         }
         if (count > 0)
@@ -326,13 +336,17 @@ SimhashIndexedContainer::SimhashIndexedContainer(uint_t maxHamDist,
     , mMaskBeginPos(    maskBeginPos    )
     , mMaskEndPos(      maskEndPos      )
 {
-    Init();
+    bool ret = Init();
+    if (!ret)
+    {
+        throw std::bad_alloc();
+    }
 }
 
 SimhashIndexedContainer::~SimhashIndexedContainer()
 {}
 
-void SimhashIndexedContainer::Init()
+bool SimhashIndexedContainer::Init()
 {
     uint_t maskWidth = mMaskEndPos - mMaskBeginPos;
     uint_t blockWidth = maskWidth / mBlockNum;
@@ -382,8 +396,10 @@ void SimhashIndexedContainer::Init()
         if (!mContainer.at(i))
         {
             throw std::bad_alloc();
+            return false;
         }
     }
+    return true;
 }
 
 void SimhashIndexedContainer::Clear()
@@ -470,13 +486,20 @@ bool SimhashIndexedContainer::FindNearDups(hash_t hash, FindAnswerType &ans,
 
 bool SimhashIndexedContainer::HasNearDups(hash_t hash, hash_t mask)
 {
+    hash_t tmp;
+    return FindFirstNearDup(hash, tmp, mask);
+}
+
+bool SimhashIndexedContainer::FindFirstNearDup(hash_t hash, hash_t &nearDup,
+    hash_t mask)
+{
     //Generate forward permutes.
     std::vector<hash_t> forwordPermutes;
     GetForwardPermutes(hash, forwordPermutes);
     //Find hash from all redundancy containers.
     for (uint_t i = 0; i < mBlockNum; ++i)
     {
-        if (mContainer.at(i)->HasNearDups(hash,
+        if (mContainer.at(i)->FindFirstNearDup(hash, nearDup,
             mProps.at(i).leftBackwardMask | mask))
         {
             return true;
@@ -537,6 +560,7 @@ public :
     virtual bool Remove         (hash_t hash);
     virtual bool Search         (hash_t hash);
     virtual bool HasNearDups    (hash_t hash);
+    virtual bool FindFirstNearDup(hash_t hash, hash_t &nearDup);
     virtual bool FindNearDups   (hash_t hash, FindAnswerType &ans);
     virtual void Clear();
     virtual uint_t GetSize();
@@ -584,6 +608,11 @@ bool SimhashTableImpl::Search(hash_t hash)
 bool SimhashTableImpl::HasNearDups(hash_t hash)
 {
     return mContainerPtr->HasNearDups(hash);
+}
+
+bool SimhashTableImpl::FindFirstNearDup(hash_t hash, hash_t &nearDup)
+{
+    return mContainerPtr->FindFirstNearDup(hash, nearDup);
 }
 
 bool SimhashTableImpl::FindNearDups(hash_t hash, FindAnswerType &ans)

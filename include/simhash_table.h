@@ -1,12 +1,12 @@
 /*==============================================================================
-*   Copyright (C) 2016 All rights reserved.
-*
-*  File Name    : simhash_table.h
-*  Author       : Zhongping Liang
-*  Date         : 2016-05-19
-*  Version      : 1.0
-*  Description  : This file provides declaration of the SimhashTable.
-==============================================================================*/
+ *   Copyright (C) 2016 All rights reserved.
+ *
+ *  File Name    : simhash_table.h
+ *  Author       : Zhongping Liang
+ *  Date         : 2016-05-19
+ *  Version      : 1.0
+ *  Description  : This file provides declaration of the SimhashTable.
+ * ============================================================================*/
 
 #ifndef SIMHASH_SIMHASH_TABLE_H_
 #define SIMHASH_SIMHASH_TABLE_H_
@@ -125,6 +125,17 @@ public:
     *   @return     true, if there is some near-duplicates; false, otherwise.
     */
     virtual bool HasNearDups    (hash_t hash) = 0;
+    /*
+    *   @brief      This func judges whether a simhash value has any near
+    *           duplicate in table, if true, the near duplicate first found
+    *           is saved in nearDup.
+    *   @author     Zhongping Liang
+    *   @date       2016-05-19
+    *   @param      hash: the input simhash value.
+    *   @param      nearDup: the output near duplicate value.
+    *   @return     true, if there is some near-duplicates; false, otherwise.
+    */
+    virtual bool FindFirstNearDup(hash_t hash, hash_t &nearDup) = 0;
     /*
     *   @brief      This func finds all simhash values from table that is near-
     *           duplicate with the given simhash value.
